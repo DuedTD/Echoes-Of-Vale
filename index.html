@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ECHOES OF VALE — Narrative Pixel RPG</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+  <script src="./data.js" defer></script>
+  <script src="./main.js" defer></script>
+</head>
+<body>
+  <div id="viewport-wrapper">
+    <div id="game-shell">
+      <div id="game-container"></div>
+
+      <!-- MAIN MENU OVERLAY -->
+      <div id="main-menu-overlay" class="overlay-layer active">
+        <div class="title-banner">
+          <div class="vine vine-left"></div>
+          <div class="vine vine-right"></div>
+          <h1 class="game-title">ECHOES OF VALE</h1>
+          <p class="game-tagline">Every interaction leaves an echo. Every decision shapes the community.</p>
+        </div>
+        <div class="menu-buttons">
+          <button id="btn-menu-play" class="wood-btn primary-btn">PLAY</button>
+          <button id="btn-menu-continue" class="wood-btn">CONTINUE</button>
+          <button id="btn-menu-journal" class="wood-btn">REFLECTION JOURNAL</button>
+          <button id="btn-menu-settings" class="wood-btn">SETTINGS</button>
+        </div>
+        <div class="menu-footer">WASD / Arrows: Move • E: Interact • J: Journal • M: Map • I: Inventory • ESC: Settings</div>
+      </div>
+
+      <!-- IN-GAME HUD -->
+      <div id="hud-overlay" class="hud-layer hidden">
+        <div class="hud-top-left wood-panel-sm">
+          <div class="hearts-row" id="hud-hearts" title="Well-being">
+            <span class="heart">♥</span><span class="heart">♥</span><span class="heart">♥</span>
+          </div>
+          <div class="gold-row">
+            <span class="coin-icon">●</span>
+            <span id="hud-gold">1,280</span>
+            <span class="gold-label">G</span>
+          </div>
+        </div>
+
+        <div class="hud-top-center">
+          <div id="hud-location-banner" class="location-pill">VALE VILLAGE SQUARE</div>
+          <div id="hud-quest-tracker" class="quest-tracker">Quest: Talk to Maya outside her Tailor Shop</div>
+        </div>
+
+        <div class="hud-top-right wood-panel-sm sc-panel">
+          <div class="sc-header">
+            <span class="olive-icon">🌿</span>
+            <span>SOCIAL CREDIBILITY</span>
+            <span id="hud-sc-value" class="sc-number">20 / 100</span>
+          </div>
+          <div class="sc-bar-track">
+            <div id="hud-sc-fill" class="sc-bar-fill" style="width: 20%;"></div>
+          </div>
+        </div>
+
+        <div class="hud-bottom-left">
+          <div id="hud-controls-hint" class="controls-hint">WASD Move • E Interact • I Bag • M Map • J Journal</div>
+        </div>
+
+        <div class="hud-bottom-right">
+          <button id="btn-hud-inventory" class="hud-icon-btn" title="Inventory (I)">🎒<span>Bag</span></button>
+          <button id="btn-hud-map" class="hud-icon-btn" title="World Map (M)">🗺️<span>Map</span></button>
+          <button id="btn-hud-journal" class="hud-icon-btn" title="Reflection Journal (J)">📖<span>Journal</span></button>
+          <button id="btn-hud-settings" class="hud-icon-btn" title="Settings (ESC)">⚙️<span>Menu</span></button>
+        </div>
+      </div>
+
+      <!-- TOAST NOTIFICATION -->
+      <div id="toast-container"></div>
+
+      <!-- DIALOGUE OVERLAY -->
+      <div id="dialogue-overlay" class="modal-backdrop hidden">
+        <div class="dialogue-box wood-panel">
+          <div class="dialogue-top">
+            <div class="portrait-frame">
+              <img id="dialogue-portrait" alt="Portrait" />
+              <div id="dialogue-mood" class="mood-badge">Concerned</div>
+            </div>
+            <div class="dialogue-content">
+              <div class="dialogue-speaker-row">
+                <span id="dialogue-speaker" class="speaker-name">Maya</span>
+                <span id="dialogue-role" class="speaker-role">Tailor's Daughter</span>
+              </div>
+              <p id="dialogue-text" class="dialogue-text"></p>
+            </div>
+          </div>
+          <div id="dialogue-choices" class="dialogue-choices"></div>
+          <div class="dialogue-footer">
+            <button id="btn-dialogue-next" class="wood-btn sm-btn hidden">Continue ▶</button>
+            <button id="btn-dialogue-close" class="wood-btn sm-btn">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- QUEST SUCCESS OVERLAY -->
+      <div id="quest-success-overlay" class="modal-backdrop hidden">
+        <div class="quest-success-panel wood-panel">
+          <div class="celebration-banner">✨ COMMUNITY MILESTONE ✨</div>
+          <h2 id="qs-title" class="qs-title">QUEST SUCCESS: MAYA'S SHADOW</h2>
+          <div class="qs-sc-pop">
+            <span class="qs-arrow">▲</span>
+            <span class="qs-olive">🌿</span>
+            <span id="qs-sc-anim">+10 SOCIAL CREDIBILITY</span>
+          </div>
+          <p id="qs-desc" class="qs-desc"></p>
+          <div class="qs-rewards-title">REWARDS EARNED</div>
+          <div id="qs-rewards" class="qs-rewards-grid"></div>
+          <div class="qs-unlock-note">
+            🔓 Unlocked: <strong>Innovation Guild &amp; Engineering Academy</strong> • 🏷️ <strong>15% Marketplace Discount Active</strong> • 📖 <strong>Journal Updated</strong>
+          </div>
+          <button id="btn-qs-claim" class="wood-btn primary-btn">CLAIM REWARDS &amp; CONTINUE</button>
+        </div>
+      </div>
+
+      <!-- REFLECTION JOURNAL OVERLAY -->
+      <div id="journal-overlay" class="modal-backdrop hidden">
+        <div class="journal-book">
+          <div class="candle-glow"></div>
+          <div class="quill-badge" title="Reflection Journal">🪶</div>
+          <div class="book-pages">
+            <div class="book-page left-page">
+              <div class="journal-tabs" id="journal-entry-tabs"></div>
+              <div id="journal-left-content" class="journal-page-body"></div>
+            </div>
+            <div class="book-spine"></div>
+            <div class="book-page right-page">
+              <div id="journal-right-content" class="journal-page-body"></div>
+              <div class="journal-footer">
+                <button id="btn-journal-close" class="wood-btn primary-btn">CLOSE JOURNAL</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- WORLD MAP OVERLAY -->
+      <div id="map-overlay" class="modal-backdrop hidden">
+        <div class="world-map-frame wood-panel">
+          <div class="map-header">
+            <h2 id="map-title">WORLD MAP: VALE REGION</h2>
+            <button id="btn-map-close" class="wood-btn sm-btn">✕ Close</button>
+          </div>
+          <div class="map-body">
+            <div class="map-canvas-wrap">
+              <canvas id="world-map-canvas" width="600" height="320"></canvas>
+              <div id="map-pins-layer"></div>
+            </div>
+            <div class="map-sidebar">
+              <div id="map-info-card" class="parchment-card">
+                <h3 id="map-loc-name">Select a Location</h3>
+                <div id="map-loc-status" class="status-pill">EXPLORE</div>
+                <p id="map-loc-desc">Hover or click any banner on the map to inspect details and travel to unlocked hubs.</p>
+                <button id="btn-map-travel" class="wood-btn primary-btn hidden">TRAVEL HERE</button>
+              </div>
+              <div class="map-legend parchment-card">
+                <div class="legend-title">MAP LEGEND</div>
+                <div class="legend-item"><span>🌿</span> Player Location</div>
+                <div class="legend-item"><span>❗</span> Active Quests</div>
+                <div class="legend-item"><span>🏛️</span> Unlocked Hubs</div>
+                <div class="legend-item"><span>🔒</span> Locked Regions</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- INVENTORY & MARKETPLACE OVERLAY -->
+      <div id="inventory-overlay" class="modal-backdrop hidden">
+        <div class="inventory-panel wood-panel">
+          <div class="panel-header">
+            <h2 id="inv-title">TRAVELER'S INVENTORY</h2>
+            <div class="gold-pill">● <span id="inv-gold">1,280</span> G</div>
+            <button id="btn-inv-close" class="wood-btn sm-btn">✕ Close</button>
+          </div>
+          <div id="market-discount-banner" class="discount-banner hidden">
+            🏷️ 15% DISCOUNT ACTIVE — Thank you for supporting Vale's community!
+          </div>
+          <div id="inv-content" class="inv-grid"></div>
+        </div>
+      </div>
+
+      <!-- SETTINGS / PAUSE OVERLAY -->
+      <div id="settings-overlay" class="modal-backdrop hidden">
+        <div class="settings-panel wood-panel">
+          <h2>SETTINGS &amp; PAUSE</h2>
+          <div class="setting-row">
+            <label for="set-music">Music Volume</label>
+            <input id="set-music" type="range" min="0" max="100" value="45" />
+          </div>
+          <div class="setting-row">
+            <label for="set-sfx">Sound Effects Volume</label>
+            <input id="set-sfx" type="range" min="0" max="100" value="70" />
+          </div>
+          <div class="setting-row">
+            <label for="set-speed">Dialogue Text Speed</label>
+            <select id="set-speed">
+              <option value="slow">Slow</option>
+              <option value="normal" selected>Normal</option>
+              <option value="fast">Fast</option>
+              <option value="instant">Instant</option>
+            </select>
+          </div>
+          <div class="setting-actions">
+            <button id="btn-set-fullscreen" class="wood-btn">Toggle Fullscreen</button>
+            <button id="btn-set-save" class="wood-btn">Save Progress</button>
+            <button id="btn-set-resume" class="wood-btn primary-btn">Resume Game</button>
+            <button id="btn-set-mainmenu" class="wood-btn">Return to Main Menu</button>
+            <button id="btn-set-newgame" class="wood-btn danger-btn">New Game (Reset Save)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
