@@ -898,24 +898,38 @@
     const rnd = makeSeededRandom(seed);
 
     if (stonePlaza) {
-      // Highland Council hilltop stone & night alpine grass
+      // Highland Council hilltop alpine grass
       px(ctx, 0, 0, w, h, '#2c4f34');
       for (let i = 0; i < (w * h) / 600; i++) {
         blob(ctx, rnd() * w, rnd() * h, 8 + rnd() * 14, rnd() < 0.5 ? '#26442d' : '#355c3c');
       }
-      // Starry night valley drop-off along north cliff edge
+      // Starry night sky & mountain ridge along north cliff drop-off
       px(ctx, 0, 0, w, 62, '#10142b');
       for (let i = 0; i < 45; i++) px(ctx, rnd() * w, rnd() * 48, 1, 1, i % 3 ? '#dfe8ff' : '#ffd978');
-      // Distant purple mountain ridge
-      ctx.fillStyle = '#25264a';
       for (let x = 0; x < w; x += 2) {
         const mh = 54 - Math.abs(Math.sin(x / 46)) * 24 - Math.sin(x / 17) * 4;
         px(ctx, x, mh, 2, 62 - mh, '#25264a');
       }
-      // Stone terrace railing
-      px(ctx, 0, 60, w, 6, '#7a758a');
-      px(ctx, 0, 66, w, 3, '#4c4859');
+      // North stone balustrade railing + pillars
+      px(ctx, 0, 60, w, 10, '#7a758a');
+      px(ctx, 0, 60, w, 2, '#b0abc2');
+      px(ctx, 0, 70, w, 4, '#464254');
+      for (let x = 16; x < w; x += 48) {
+        px(ctx, x, 56, 10, 16, '#9690a8');
+        px(ctx, x, 56, 10, 2, '#d1cce0');
+      }
+      // Left & Right stone parapet borders
+      px(ctx, 0, 60, 20, h - 60, '#6e697d');
+      px(ctx, 18, 60, 3, h - 60, '#464254');
+      px(ctx, w - 20, 60, 20, h - 60, '#6e697d');
+      px(ctx, w - 21, 60, 3, h - 60, '#464254');
+      // South stone parapet borders flanking the center stairs (x = 286..354 open)
+      px(ctx, 0, h - 22, 286, 22, '#6e697d');
+      px(ctx, 0, h - 22, 286, 2, '#b0abc2');
+      px(ctx, 354, h - 22, w - 354, 22, '#6e697d');
+      px(ctx, 354, h - 22, w - 354, 2, '#b0abc2');
     } else {
+
       px(ctx, 0, 0, w, h, '#3f7a34');
       for (let i = 0; i < (w * h) / 700; i++) {
         blob(ctx, rnd() * w, rnd() * h, 7 + rnd() * 14, rnd() < 0.5 ? '#3a7430' : '#448438');
@@ -935,9 +949,9 @@
       }
     }
 
-    const stoneTones = stonePlaza
-      ? ['#9d98ad', '#8c879c', '#aba6ba', '#7f7a8f']
-      : ['#c9a070', '#b98a5a', '#a87a4c', '#c29866'];
+    const stoneTones = 
+      stonePlaza ? ['#9d98ad', '#8c879c', '#aba6ba', '#7f7a8f'] : 
+    ['#c9a070', '#b98a5a', '#a87a4c', '#c29866'];
     const borderCol = stonePlaza ? '#5e5a6e' : '#8a6038';
     const hiCol = stonePlaza ? '#c4c0d4' : '#e0bc8a';
 
@@ -1617,6 +1631,15 @@
         ff.phase = Math.random() * 6;
         this.fireflies.push(ff);
       }
+    this.fitCamera();
+    }
+
+    fitCamera() {
+      const cam = this.cameras?.main;
+      if (!cam) return;
+      const z = Math.max(this.scale.width / 640, this.scale.height / 360);
+      cam.setZoom(z);
+      cam.centerOn(320, 180);
     }
     update(time) {
       this.fireflies.forEach((ff) => {
@@ -1694,10 +1717,7 @@
 
       this.physics.add.collider(this.player, this.colliders);
 
-      const camZoom = this.currentZone === 'tailor_shop' ? 640 / 480 : 1.35;
-      this.cameras.main.setZoom(camZoom);
-      this.cameras.main.setBounds(0, 0, worldSize.w, worldSize.h);
-      this.cameras.main.startFollow(this.player, true, 0.14, 0.14);
+      this.fitCamera();
 
       // ---- NIGHT ATMOSPHERIC LIGHTING SYSTEM ----
       // Carves soft warm pools out of a deep indigo night blanket around streetlights, lanterns, windows & player!
@@ -1759,6 +1779,25 @@
         audioManager.playClick();
         this.nearestInteractable.onInteract();
       }
+    }
+
+    fitCamera() {
+      const cam = this.cameras?.main;
+      if (!cam || !this.worldSize) return;
+      const isPortrait = this.scale.height > this.scale.width;
+      const camZoom =
+        this.currentZone === 'tailor_shop'
+          ? (isPortrait ? 1.45 : Math.max(this.scale.width / 480, this.scale.height / 270))
+          : (isPortrait ? 1.3 : 1.35);
+
+      cam.setZoom(camZoom);
+
+      const viewW = this.scale.width / camZoom;
+      const viewH = this.scale.height / camZoom;
+      const padX = Math.max(0, (viewW - this.worldSize.w) / 2);
+      const padY = Math.max(0, (viewH - this.worldSize.h) / 2);
+      cam.setBounds(-padX, -padY, this.worldSize.w + padX * 2, this.worldSize.h + padY * 2);
+      if (this.player) cam.startFollow(this.player, true, 0.14, 0.14);
     }
 
     registerLight(x, y, scale = 1.0, addHalo = true) {
@@ -1901,7 +1940,7 @@
       this.addInteractable(210, 198, 34, "[E] Enter Maya's Workshop", () => {
         if (!gameState.canEnterTailorShop()) {
           window.valeUI.openSimpleNotice(
-            "Maya's Tailor & Workshop",
+            "Notice",
             "Maya is sitting right outside under the lantern looking troubled. Speak with Maya first before stepping into her family's workshop!"
           );
           window.valeUI.toast('❗ Talk to Maya outside the door first!');
@@ -2004,7 +2043,7 @@
         });
       } else {
         this.addLabel(820, 272, '▶ Innovation Guild (OPEN!)');
-        this.addInteractable(826, 308, 42, '[E] Enter Innovation Guild', () => this.transitionTo('innovation_guild', { x: 96, y: 248 }));
+        this.addInteractable(826, 320, 42, '[E] Enter Innovation Guild', () => this.transitionTo('innovation_guild', { x: 96, y: 248 }));
       }
 
       return { w: W, h: H, defaultSpawn: { x: 448, y: 365 } };
@@ -2158,8 +2197,8 @@
         );
       });
 
-      this.addLabel(320, 46, '▲ Back to Vale Square');
-      this.addInteractable(320, 52, 42, '[E] Return to Vale Square', () => this.transitionTo('village', { x: 448, y: 506 }));
+      this.addLabel(320, 61, '▲ Back to Vale Square');
+      this.addInteractable(320, 90, 42, '[E] Return to Vale Square', () => this.transitionTo('village', { x: 448, y: 506 }));
       return { w: W, h: H, defaultSpawn: { x: 320, y: 92 } };
     }
 
@@ -2206,6 +2245,16 @@
         [140, 175, 360, 120],
         [290, 285, 60, 75]
       ], 97, true);
+      this.addSolid(320, 87.5, 640, 175);   // North grass (above plaza)
+      this.addSolid(70, 267.5, 140, 185);   // West grass (left of plaza)
+      this.addSolid(570, 267.5, 140, 185);  // East grass (right of plaza)
+      this.addSolid(215, 327.5, 150, 65);   // South-West grass (left of stairs)
+      this.addSolid(425, 327.5, 150, 65);
+      this.addSolid(W / 2, 38, W, 76);      // North cliff railing
+      this.addSolid(10, H / 2, 20, H);      // West stone parapet
+      this.addSolid(W - 10, H / 2, 20, H);  // East stone parapet
+      this.addSolid(143, H - 11, 286, 22);  // South-west parapet
+      this.addSolid(497, H - 11, 286, 22);  // South-east parapet
       this.add.image(0, 0, 'ground_highland').setOrigin(0, 0).setDepth(0);
 
       // Highland Council Grand Hall
@@ -2792,9 +2841,9 @@
 
     openNpcChat(charKey, text) { this.showDialogue({ charKey, mood: 'Expressive', text }); }
     openSimpleNotice(title, text) {
-      this.showDialogue({ charKey: 'villager_thomas', mood: 'Notice', text });
+      this.showDialogue({ charKey: 'notice', mood: 'Notice', text });
       this.el.dlgSpeaker.textContent = title;
-      this.el.dlgRole.textContent = 'Vale Village';
+      this.el.dlgRole.textContent = 'Before Entering';
     }
 
     // ---- EASTER EGG: SANS THE SKELETON ----
@@ -3111,7 +3160,6 @@
           }
         };
 
-        pin.onmouseenter = inspect;
         pin.onclick = () => { audioManager.playClick(); inspect(); };
         this.el.mapPins.appendChild(pin);
         if (isPlayerHere) inspect();
@@ -3122,40 +3170,100 @@
       const ctx = this.el.mapCanvas.getContext('2d');
       ctx.imageSmoothingEnabled = false;
       const W = 600, H = 320;
-      ctx.fillStyle = '#c4b183'; ctx.fillRect(0, 0, W, H);
-      ctx.fillStyle = '#89a86b'; ctx.fillRect(22, 22, W - 44, H - 44);
+      const pad = 20;
 
+      // Outer parchment margin
+      ctx.fillStyle = '#c4b183';
+      ctx.fillRect(0, 0, W, H);
+
+      // Clip all terrain, mountains, glows & Highland mist strictly inside the inner border
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(pad, pad, W - pad * 2, H - pad * 2);
+      ctx.clip();
+
+      ctx.fillStyle = '#89a86b';
+      ctx.fillRect(pad, pad, W - pad * 2, H - pad * 2);
+
+      // Highland mountain range (stays cleanly inside top border)
       ctx.fillStyle = '#6c6878';
-      for (let x = 80; x < 520; x += 64) {
-        ctx.beginPath(); ctx.moveTo(x, 96); ctx.lineTo(x + 36, 36); ctx.lineTo(x + 72, 96); ctx.fill();
+      for (let x = 68; x < 540; x += 64) {
+        ctx.beginPath();
+        ctx.moveTo(x, 104);
+        ctx.lineTo(x + 36, 40);
+        ctx.lineTo(x + 72, 104);
+        ctx.fill();
+        // Snow-lit ridge caps
+        ctx.fillStyle = '#9b96ad';
+        ctx.beginPath();
+        ctx.moveTo(x + 25, 60);
+        ctx.lineTo(x + 36, 40);
+        ctx.lineTo(x + 47, 60);
+        ctx.fill();
+        ctx.fillStyle = '#6c6878';
       }
 
-      ctx.strokeStyle = '#5da9c9'; ctx.lineWidth = 10;
-      ctx.beginPath(); ctx.moveTo(20, 250); ctx.quadraticCurveTo(220, 210, 340, 275); ctx.quadraticCurveTo(460, 310, 585, 220); ctx.stroke();
+      // Winding valley river
+      ctx.strokeStyle = '#5da9c9';
+      ctx.lineWidth = 10;
+      ctx.beginPath();
+      ctx.moveTo(20, 250);
+      ctx.quadraticCurveTo(220, 210, 340, 275);
+      ctx.quadraticCurveTo(460, 310, 585, 220);
+      ctx.stroke();
 
-      ctx.strokeStyle = '#b59461'; ctx.lineWidth = 6;
-      ctx.beginPath(); ctx.moveTo(144, 122); ctx.lineTo(252, 179); ctx.lineTo(384, 211); ctx.stroke();
+      // Main Vale roads
+      ctx.strokeStyle = '#b59461';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(144, 122);
+      ctx.lineTo(252, 179);
+      ctx.lineTo(384, 211);
+      ctx.stroke();
 
       if (guildUnlocked) {
-        ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 6;
-        ctx.beginPath(); ctx.moveTo(252, 179); ctx.lineTo(456, 109); ctx.stroke();
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(252, 179);
+        ctx.lineTo(456, 109);
+        ctx.stroke();
         ctx.fillStyle = 'rgba(255, 215, 0, 0.28)';
-        ctx.beginPath(); ctx.arc(456, 109, 44, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath();
+        ctx.arc(456, 109, 44, 0, Math.PI * 2);
+        ctx.fill();
       }
 
+      // Highland Council road / mist aligned to y: 22% (y = 70)
       if (councilUnlocked) {
-        ctx.strokeStyle = '#7cffb2'; ctx.lineWidth = 6;
-        ctx.beginPath(); ctx.moveTo(252, 179); ctx.lineTo(300, 54); ctx.stroke();
+        ctx.strokeStyle = '#7cffb2';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(252, 179);
+        ctx.lineTo(300, 70);
+        ctx.stroke();
         ctx.fillStyle = 'rgba(124, 255, 178, 0.25)';
-        ctx.beginPath(); ctx.arc(300, 54, 42, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath();
+        ctx.arc(300, 70, 40, 0, Math.PI * 2);
+        ctx.fill();
       } else {
         ctx.fillStyle = 'rgba(230, 232, 240, 0.68)';
         ctx.beginPath();
-        ctx.arc(270, 56, 30, 0, Math.PI * 2);
-        ctx.arc(305, 52, 34, 0, Math.PI * 2);
-        ctx.arc(340, 58, 28, 0, Math.PI * 2);
+        ctx.arc(268, 70, 26, 0, Math.PI * 2);
+        ctx.arc(300, 66, 30, 0, Math.PI * 2);
+        ctx.arc(332, 70, 26, 0, Math.PI * 2);
         ctx.fill();
       }
+
+      ctx.restore();
+
+      // Crisp inner decorative map border
+      ctx.strokeStyle = '#5c3a21';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(pad, pad, W - pad * 2, H - pad * 2);
+      ctx.strokeStyle = '#e8b84a';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(pad + 3, pad + 3, W - (pad + 3) * 2, H - (pad + 3) * 2);
     }
 
     // ---- USABLE INVENTORY ITEMS! ----
@@ -3333,6 +3441,30 @@
 
   window.valeUI = new UIManager(game);
   window.gameState = gameState;
+
+  function syncGameResolution() {
+    const shell = document.getElementById('game-shell');
+    if (!shell || !game || !game.scale) return;
+    const rect = shell.getBoundingClientRect();
+    if (rect.width < 10 || rect.height < 10) return;
+
+    const ar = rect.width / rect.height;
+    const logicalW = ar >= 1 ? Math.round(360 * ar) : 360;
+    const logicalH = ar >= 1 ? 360 : Math.round(360 / ar);
+
+    if (game.scale.width !== logicalW || game.scale.height !== logicalH) {
+      game.scale.resize(logicalW, logicalH);
+    }
+
+    const menu = game.scene.getScene('MainMenuScene');
+    if (menu && menu.scene.isActive() && menu.fitCamera) menu.fitCamera();
+    const world = game.scene.getScene('WorldScene');
+    if (world && world.scene.isActive() && world.fitCamera) world.fitCamera();
+  }
+
+  window.addEventListener('resize', syncGameResolution);
+  window.addEventListener('orientationchange', () => setTimeout(syncGameResolution, 150));
+  setTimeout(syncGameResolution, 60);
 
   if (gameState.hasSave()) {
     try {

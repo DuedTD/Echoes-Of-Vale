@@ -382,6 +382,7 @@
       padding: 14px 18px;
       display: flex;
       flex-direction: column;
+      scrollbar-width: none;
       gap: 10px;
     }
 
@@ -498,6 +499,7 @@
 
     /* QUEST SUCCESS */
     .quest-success-panel {
+      scrollbar-width: none;
       width: min(680px, 92%);
       padding: 20px 24px;
       text-align: center;
@@ -608,6 +610,7 @@
     }
 
     .book-pages {
+      
       display: flex;
       height: 100%;
       background: var(--parchment);
@@ -618,6 +621,7 @@
     }
 
     .book-page {
+      scrollbar-width: none;
       flex: 1;
       padding: 16px 18px;
       display: flex;
@@ -695,47 +699,81 @@
 
     /* WORLD MAP */
     .world-map-frame {
-      width: min(900px, 95%);
-      padding: 14px 16px;
+      width: 900px;
+      flex-shrink: 0;
+      padding: 14px 16px 0 14px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      overflow: hidden;
+      box-sizing: border-box;
     }
 
     .map-header { display: flex; align-items: center; justify-content: space-between; }
     .map-header h2 { font-family: 'Press Start 2P', monospace; font-size: clamp(10px, 1.25vw, 15px); color: var(--gold); }
 
     .map-body {
-      display: flex;
-      flex-direction: row;
-      align-items: stretch;
+      display: grid;
+      grid-template-columns: 600px 1fr;
       gap: 12px;
       width: 100%;
-      height: 400px;
-    }
-
-    .map-body > :first-child {
-      flex: 4 0 450px;
-      height: 100%;
-    }
-
-    .map-body > :last-child {
-      scrollbar-width: none;
-      flex: 7;
-      min-width: 0;
-      overflow-y: auto;
+      flex-shrink: 0;
+      align-items: stretch;
     }
 
     .map-canvas-wrap {
       position: relative;
+      width: 600px;
+      height: 320px;
+      flex-shrink: 0;
+      border: 3px solid #2a170b;
+      border-radius: 5px;
+      overflow: hidden;
+      background: #d8c392;
+      box-sizing: border-box;
+    }
+
+    #world-map-canvas {
+      width: 600px;
+      height: 400px;
+      display: block;
+      image-rendering: pixelated;
+    }
+
+    /* Stops the right-hand info panel from resizing when text or buttons change */
+    .map-body > :last-child {
+      height: 400px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+    }
+    .world-map-frame {
+      overflow-x: hidden;
+      overflow-y: auto;
+      box-sizing: border-box;
+      scrollbar-width: none;
+    }
+
+    .map-canvas-wrap {
+      position: relative;
+      width: min(100%, calc((94dvh - 110px) * 600 / 320));
+      max-width: 100%;
+      min-width: 0;
+      margin: 0 auto;
       border: 3px solid #2a170b;
       border-radius: 5px;
       overflow: hidden;
       background: #d8c392;
       aspect-ratio: 600 / 320;
+      box-sizing: border-box;
     }
 
-    #world-map-canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+    #world-map-canvas { 
+      width: 100%; 
+      height: 100%; 
+      display: block; 
+      image-rendering: pixelated; 
+    }
     #map-pins-layer { position: absolute; inset: 0; flex:6}
 
     .map-pin {
@@ -765,7 +803,7 @@
     .map-pin-badge { font-size: 13px; color: var(--amber-glow); margin-top: 2px; }
     .map-pin.locked .map-pin-badge { color: #ffb8a8; }
     .map-pin.newly-unlocked .map-pin-badge { color: #7cffb2; }
-    .map-sidebar { display: flex; flex-direction: column; gap: 10px; flex: 4}
+    .map-sidebar {scrollbar-width: none ;display: flex; flex-direction: column; gap: 10px; flex: 4; margin: 0px 0px 10px 0}
 
     .parchment-card {
       background: var(--parchment);
@@ -829,6 +867,7 @@
     }
 
     .inv-grid {
+      scrollbar-width: none;
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
       gap: 10px;
@@ -879,6 +918,7 @@
 
     /* SETTINGS */
     .settings-panel {
+      scrollbar-width: none;
       width: min(460px, 90%);
       padding: 20px 24px;
       display: flex;
@@ -1011,7 +1051,7 @@ body.touch-mode #hud-controls-hint {
 }
 
 /* Compact & stack modals on small / mobile screens */
-@media (max-width: 860px), (max-height: 520px) {
+@media (max-width: 920px), (max-height: 520px) {
   #game-shell {
     width: 100%;
     height: 100%;
@@ -1019,24 +1059,225 @@ body.touch-mode #hud-controls-hint {
     border-width: 2px;
   }
 
-  .title-banner { padding: 10px 18px; }
+  .modal-backdrop {
+    padding: 6px;
+  }
+
+  /* Compact HUD so it doesn't crowd gameplay */
+  .hud-layer { padding: 6px; }
+  .hud-top-left { top: 6px; left: 6px; padding: 4px 8px; }
+  .hud-top-right { top: 6px; right: 6px; padding: 5px 8px; min-width: 155px; }
+  .hud-top-center { top: 5px; }
+  .location-pill { font-size: 8px; padding: 3px 8px; }
+  .quest-tracker { font-size: 13px; max-width: 44vw; overflow: hidden; text-overflow: ellipsis; }
+  .hud-bottom-right { bottom: 6px; right: 6px; gap: 5px; }
+  .hud-icon-btn { width: 40px; height: 40px; font-size: 15px; }
+  .hud-icon-btn span { font-size: 11px; }
+
+  #mobile-joystick-zone { left: 10px; bottom: 10px; width: 84px; height: 84px; }
+  #btn-mobile-interact { right: 12px; bottom: 54px; min-width: 58px; height: 58px; font-size: 9px; }
+
+  /* Main Menu: 2x2 buttons on short landscape screens */
+  .overlay-layer { padding: 8px 14px; justify-content: center; gap: 10px; }
+  .title-banner { padding: 8px 20px; }
+  .game-title { font-size: clamp(14px, 3vw, 22px); }
+  .game-tagline { font-size: 14px; margin-top: 4px; }
+  .menu-buttons { display: grid; grid-template-columns: repeat(2, 1fr); width: min(440px, 86%); gap: 8px; }
+  .menu-buttons .wood-btn { padding: 8px 10px; font-size: 9px; }
   .menu-footer { display: none; }
 
-  .hud-top-center { top: 6px; }
-  .quest-tracker { max-width: 46vw; overflow: hidden; text-overflow: ellipsis; }
+  /* FIX: Keep Blueprint compact & prevent Dialogue Box from being crushed */
+  #dialogue-overlay {
+    padding: 6px 8px;
+    gap: 5px;
+    justify-content: flex-end;
+  }
 
-  .dialogue-box { width: 98%; padding: 8px 10px; gap: 6px; max-height: 82vh; overflow-y: auto; }
-  .dialogue-content { min-height: 62px; padding: 6px 10px; }
-  .dialogue-choices { grid-template-columns: 1fr; gap: 6px; }
-  .choice-btn { padding: 8px 10px; }
+  #dialogue-overlay #blueprint-showcase {
+    width: auto;
+    max-width: 82%;
+    padding: 4px 8px 5px;
+    gap: 3px;
+    border-width: 3px;
+    flex-shrink: 1;
+    min-height: 0;
+  }
 
-  .journal-book { width: 98%; height: 92%; padding: 8px; }
+  #dialogue-overlay #blueprint-showcase .bp-header {
+    font-size: 7.5px;
+    gap: 8px;
+  }
+
+  #dialogue-overlay #blueprint-showcase .bp-tag {
+    font-size: 12px;
+    padding: 0 5px;
+  }
+
+  #dialogue-overlay #blueprint-showcase img {
+    height: clamp(56px, 24dvh, 112px);
+    width: auto;
+    max-width: 100%;
+    margin: 0 auto;
+    object-fit: contain;
+  }
+
+  #dialogue-overlay #blueprint-showcase .bp-caption {
+    font-size: 12.5px;
+    line-height: 1.05;
+  }
+
+  #dialogue-overlay .dialogue-box {
+    flex-shrink: 0;
+    width: 98%;
+    max-height: 58dvh;
+    padding: 6px 10px;
+    gap: 5px;
+    overflow-y: auto;
+  }
+
+  #dialogue-overlay .dialogue-top {
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  #dialogue-overlay .portrait-frame {
+    width: 54px;
+    padding: 2px;
+  }
+
+  #dialogue-overlay .mood-badge {
+    font-size: 10px;
+    margin-top: 2px;
+    padding: 0 2px;
+  }
+
+  #dialogue-overlay .dialogue-content {
+    min-height: 48px;
+    padding: 5px 8px;
+  }
+
+  #dialogue-overlay .dialogue-speaker-row {
+    gap: 6px;
+    padding-bottom: 2px;
+    margin-bottom: 3px;
+  }
+
+  #dialogue-overlay .speaker-name { font-size: 9.5px; }
+  #dialogue-overlay .speaker-role { font-size: 13px; }
+  #dialogue-overlay .dialogue-text { font-size: 16px; line-height: 1.15; }
+
+  #dialogue-overlay .dialogue-choices {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 5px;
+  }
+
+  #dialogue-overlay .choice-btn { padding: 5px 8px; gap: 6px; border-width: 2px; }
+  #dialogue-overlay .choice-icon { font-size: 15px; }
+  #dialogue-overlay .choice-tag { font-size: 6.5px; }
+  #dialogue-overlay .choice-label { font-size: 14px; line-height: 1.05; }
+  #dialogue-overlay .dialogue-footer .wood-btn { padding: 5px 10px; font-size: 8px; }
+
+  /* Keep other modals scrollable & cleanly sized on mobile landscape */
+  .quest-success-panel,
+  .inventory-panel,
+  .settings-panel,
+  .world-map-frame,
+  #feedback-overlay .feedback-panel {
+    width: 96%;
+    max-height: 94dvh;
+    overflow-y: auto;
+    padding: 10px 14px;
+    gap: 7px;
+  }
+
+  .qs-desc { font-size: 16px; padding: 6px 10px; }
+  .reward-card { padding: 6px; font-size: 14px; }
+  .reward-card .r-icon { font-size: 20px; }
+
+  .journal-book { width: 96%; height: 94dvh; padding: 8px; }
+  .book-page { padding: 10px 12px; }
+  .journal-art-box img { width: 72px; height: 72px; }
+  .reflection-quote { font-size: 16px; }
+
+  .map-body { grid-template-columns: 1.5fr 1fr; gap: 8px; }
+  .map-pin { min-width: 78px; padding: 3px 4px; }
+  .map-pin-name { font-size: 6px; }
+  .map-pin-badge { font-size: 11px; }
+}
+
+/* Portrait phone layout (narrow width) */
+/* ================= PORTRAIT / VERTICAL MODE FIX ================= */
+@media (orientation: portrait), (max-width: 600px) {
+  #game-shell {
+    width: 100%;
+    height: 100%;
+    aspect-ratio: auto;
+    border-width: 2px;
+  }
+
+  /* Row 1: Hearts/Gold (left) + Social Credibility (right) */
+  .hud-top-left {
+    top: 8px;
+    left: 8px;
+    padding: 5px 8px;
+  }
+  .hearts-row { font-size: 15px; letter-spacing: 2px; }
+  .gold-row { font-size: 10px; gap: 4px; }
+
+  .hud-top-right {
+    top: 8px;
+    right: 8px;
+    padding: 5px 8px;
+    min-width: 150px;
+    max-width: 54vw;
+  }
+  .sc-header { font-size: 6.5px; gap: 4px; margin-bottom: 4px; }
+  .sc-bar-track { height: 9px; }
+
+  /* Row 2: Move Location & Quest Tracker cleanly BELOW Row 1 so nothing overlaps */
+  .hud-top-center {
+    top: 60px;
+    left: 8px;
+    right: 8px;
+    transform: none;
+    align-items: center;
+    gap: 3px;
+  }
+  .location-pill { font-size: 8px; padding: 3px 10px; }
+  .quest-tracker {
+    max-width: 100%;
+    white-space: normal;
+    text-align: center;
+    font-size: 14px;
+    line-height: 1.15;
+    padding: 3px 8px;
+  }
+
+  /* Keep toasts below the 2-row top HUD */
+  #toast-container { top: 124px; width: 92%; }
+  .toast-msg { font-size: 16px; text-align: center; }
+
+  /* Hide keyboard WASD bar in vertical mode & give joystick/buttons room */
+  #hud-controls-hint { display: none; }
+  .hud-bottom-right { bottom: 10px; right: 10px; gap: 6px; }
+  .hud-icon-btn { width: 44px; height: 44px; font-size: 17px; }
+  #mobile-joystick-zone { left: 14px; bottom: 14px; width: 96px; height: 96px; }
+  #btn-mobile-interact { right: 14px; bottom: 68px; min-width: 64px; height: 64px; font-size: 10px; }
+
+  /* Inside @media (max-width: 920px), (max-height: 520px) */
+.map-body { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 8px; }
+
+/* Inside @media (orientation: portrait), (max-width: 600px) */
+.map-body { grid-template-columns: minmax(0, 1fr); }
+
+  /* Portrait menus & modals */
+  .menu-buttons { grid-template-columns: 1fr; width: 78%; }
+  #dialogue-overlay #blueprint-showcase { max-width: 96%; width: 96%; }
+  #dialogue-overlay #blueprint-showcase img { height: auto; max-height: 24dvh; width: 100%; }
+  #dialogue-overlay .dialogue-box { max-height: 60dvh; }
+  #dialogue-overlay .dialogue-choices { grid-template-columns: 1fr; }
   .book-pages { flex-direction: column; overflow-y: auto; }
   .book-spine { width: 100%; height: 6px; flex: none; }
-
-  .world-map-frame { width: 98%; max-height: 94%; overflow-y: auto; padding: 10px; }
   .map-body { grid-template-columns: 1fr; }
-  .map-pin { min-width: 82px; padding: 3px 5px; }
-
   .qs-rewards-grid { grid-template-columns: 1fr; }
 }

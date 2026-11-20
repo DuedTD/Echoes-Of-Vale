@@ -73,6 +73,41 @@ window.GAME_DATA = {
       "ht": "#d9b45a"
     },
 
+    "notice_icon": {
+      "portrait": "portrait_notice",
+      "palette": { "d": "#1a0e1f" },
+      "grid": ["d"],
+      "portraitBg": "#1a0e1f",
+      "portraitScale": 3,
+      "portraitPalette": {
+        "d": "#1a0e1f",
+        "m": "#2e1b38",
+        "o": "#c77b18",
+        "g": "#ffd046",
+        "y": "#fff3a8"
+      },
+      "portraitGrid": [
+        "dddddddddddddddddd",
+        "dggggggggggggggggd",
+        "dgoooooooooooooogd",
+        "dgmmmmmmmmmmmmmmgd",
+        "dgmmmmddddddmmmmgd",
+        "dgmmmmdyggodmmmmgd",
+        "dgmmmmdyggodmmmmgd",
+        "dgmmmmdyggodmmmmgd",
+        "dgmmmmdyggodmmmmgd",
+        "dgmmmmdyggodmmmmgd",
+        "dgmmmmmddddmmmmmgd",
+        "dgmmmmmmmmmmmmmmgd",
+        "dgmmmmmddddmmmmmgd",
+        "dgmmmmdyggodmmmmgd",
+        "dgmmmmdyggodmmmmgd",
+        "dgmmmmmddddmmmmmgd",
+        "dggggggggggggggggd",
+        "dddddddddddddddddd"
+      ]
+    },
+
     "npc_sans": {
       "portrait": "portrait_sans",
       "palette": {
@@ -209,7 +244,7 @@ window.GAME_DATA = {
       "id": "highland_council",
       "name": "HIGHLAND COUNCIL",
       "shortName": "Highland Council",
-      "mapPos": { "x": 50, "y": 17 },
+      "mapPos": { "x": 50, "y": 22 },
       "unlockedByDefault": false,
       "requiredSC": 50,
       "description": "The regional civic assembly overlooking Vale Valley. Only trusted community advocates with 50 Social Credibility may present reform motions here."
@@ -362,6 +397,12 @@ window.GAME_DATA = {
       "role": "Engineering Academy Applicant",
       "portrait": "portrait_maya_happy",
       "voice": { "freq": 560, "type": "triangle", "jitter": 65, "step": 2 }
+    },
+    "notice": {
+      "name": "Notice",
+      "role": "Vale Village",
+      "portrait": "portrait_notice",
+      "voice": { "freq": 520, "type": "sine", "jitter": 15, "step": 4 }
     },
     "arthur": {
       "name": "Arthur (Maya's Father)",
