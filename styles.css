@@ -707,10 +707,23 @@
 
     .map-body {
       display: flex;
-      grid-template-columns: 1.85fr 1fr;
-      gap: 12px;
-      align-items: stretch;
       flex-direction: row;
+      align-items: stretch;
+      gap: 12px;
+      width: 100%;
+      height: 400px;
+    }
+
+    .map-body > :first-child {
+      flex: 4 0 450px;
+      height: 100%;
+    }
+
+    .map-body > :last-child {
+      scrollbar-width: none;
+      flex: 7;
+      min-width: 0;
+      overflow-y: auto;
     }
 
     .map-canvas-wrap {
@@ -915,3 +928,115 @@
       from { opacity: 0; transform: translateY(-8px); }
       to { opacity: 1; transform: translateY(0); }
     }
+
+    /* ================= MOBILE & TOUCH SUPPORT ================= */
+html, body {
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  height: 100dvh;
+}
+
+#viewport-wrapper {
+  height: 100dvh;
+  padding: env(safe-area-inset-top, 4px) env(safe-area-inset-right, 4px) env(safe-area-inset-bottom, 4px) env(safe-area-inset-left, 4px);
+}
+
+#mobile-controls {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 16;
+}
+
+#mobile-joystick-zone {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  width: clamp(92px, 16vw, 128px);
+  height: clamp(92px, 16vw, 128px);
+  border-radius: 50%;
+  background: rgba(34, 20, 12, 0.52);
+  border: 3px solid rgba(245, 166, 35, 0.72);
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.55);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+#mobile-joystick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 42%;
+  height: 42%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ffd978 0%, #c87b28 70%, #5c3214 100%);
+  border: 2px solid #261408;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.65);
+  pointer-events: none;
+}
+
+#btn-mobile-interact {
+  position: absolute;
+  right: 16px;
+  bottom: 76px;
+  min-width: clamp(64px, 11vw, 84px);
+  height: clamp(64px, 11vw, 84px);
+  border-radius: 50%;
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(9px, 1.4vw, 12px);
+  color: #fff6d6;
+  background: linear-gradient(180deg, #8c5328 0%, #4d2912 100%);
+  border: 3px solid #261408;
+  box-shadow: inset 0 0 0 2px #f5a623, 0 4px 12px rgba(0, 0, 0, 0.65);
+  pointer-events: auto;
+  touch-action: none;
+  opacity: 0.5;
+  transition: transform 0.1s ease, opacity 0.15s ease, box-shadow 0.15s ease;
+}
+
+#btn-mobile-interact.ready {
+  opacity: 1;
+  background: linear-gradient(180deg, #439157 0%, #245732 100%);
+  box-shadow: inset 0 0 0 2px #7cffb2, 0 0 16px rgba(46, 204, 113, 0.85);
+}
+
+#btn-mobile-interact:active {
+  transform: scale(0.93);
+}
+
+/* Hide keyboard-only hint when touch controls are active */
+body.touch-mode #hud-controls-hint {
+  display: none;
+}
+
+/* Compact & stack modals on small / mobile screens */
+@media (max-width: 860px), (max-height: 520px) {
+  #game-shell {
+    width: 100%;
+    height: 100%;
+    aspect-ratio: auto;
+    border-width: 2px;
+  }
+
+  .title-banner { padding: 10px 18px; }
+  .menu-footer { display: none; }
+
+  .hud-top-center { top: 6px; }
+  .quest-tracker { max-width: 46vw; overflow: hidden; text-overflow: ellipsis; }
+
+  .dialogue-box { width: 98%; padding: 8px 10px; gap: 6px; max-height: 82vh; overflow-y: auto; }
+  .dialogue-content { min-height: 62px; padding: 6px 10px; }
+  .dialogue-choices { grid-template-columns: 1fr; gap: 6px; }
+  .choice-btn { padding: 8px 10px; }
+
+  .journal-book { width: 98%; height: 92%; padding: 8px; }
+  .book-pages { flex-direction: column; overflow-y: auto; }
+  .book-spine { width: 100%; height: 6px; flex: none; }
+
+  .world-map-frame { width: 98%; max-height: 94%; overflow-y: auto; padding: 10px; }
+  .map-body { grid-template-columns: 1fr; }
+  .map-pin { min-width: 82px; padding: 3px 5px; }
+
+  .qs-rewards-grid { grid-template-columns: 1fr; }
+}

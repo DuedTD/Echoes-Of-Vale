@@ -38,7 +38,9 @@
     JOURNAL_ENTRIES,
     QUESTS,
     CHARACTERS,
-    NPC_LINES
+    NPC_LINES,
+    SKINS,
+    DIALOGUES
   } = GAME_DATA;
 
   window.GAME_DATA = GAME_DATA;
@@ -499,11 +501,144 @@
         }
         return 'Act 3: Travel North to the Highland Council [M] & present the Equal-Access Motion!';
       }
-      return 'Vale Transformed! Try Private Replay in Journal [J] or chat with the skeleton by the north-west lamp...';
+      return 'Vale Transformed! Try Private Replay in Journal [J]';
     }
   }
 
   const gameState = new GameStateManager();
+
+  /* =========================================================
+     1.5 MOBILE TOUCH CONTROLS (VIRTUAL JOYSTICK + INTERACT)
+  ========================================================= */
+  window.mobileInput = { x: 0, y: 0 };
+
+  class MobileControls {
+    constructor() {
+      const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      this.enabled = isTouch;
+      this.pointerId = null;
+      this.buildDOM();
+      this.bindTouch();
+      this.setEnabled(this.enabled);
+
+      gameState.subscribe((event) => {
+        if (event === 'ui_toggle') {
+          this.resetStick();
+          this.refreshVisibility();
+        }
+      });
+    }
+
+    buildDOM() {
+      let wrap = document.getElementById('mobile-controls');
+      if (!wrap) {
+        wrap = document.createElement('div');
+        wrap.id = 'mobile-controls';
+        wrap.className = 'hidden';
+        wrap.innerHTML = `
+          <div id="mobile-joystick-zone"><div id="mobile-joystick-knob"></div></div>
+          <button id="btn-mobile-interact" type="button">ACT</button>
+        `;
+        document.getElementById('game-shell').appendChild(wrap);
+      }
+      this.wrap = wrap;
+      this.zone = document.getElementById('mobile-joystick-zone');
+      this.knob = document.getElementById('mobile-joystick-knob');
+      this.btnInteract = document.getElementById('btn-mobile-interact');
+    }
+
+    bindTouch() {
+      const updateStick = (clientX, clientY) => {
+        const rect = this.zone.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const maxR = rect.width * 0.36;
+        let dx = clientX - cx;
+        let dy = clientY - cy;
+        const dist = Math.hypot(dx, dy);
+        if (dist > maxR) {
+          dx = (dx / dist) * maxR;
+          dy = (dy / dist) * maxR;
+        }
+        this.knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+        // Deadzone of 15% prevents accidental micro-drifting
+        const norm = dist / maxR;
+        if (norm < 0.15) {
+          window.mobileInput.x = 0;
+          window.mobileInput.y = 0;
+        } else {
+          window.mobileInput.x = dx / maxR;
+          window.mobileInput.y = dy / maxR;
+        }
+      };
+
+      this.zone.addEventListener('pointerdown', (e) => {
+        if (this.pointerId !== null) return;
+        e.preventDefault();
+        audioManager.init();
+        this.pointerId = e.pointerId;
+        this.zone.setPointerCapture(e.pointerId);
+        updateStick(e.clientX, e.clientY);
+      });
+
+      this.zone.addEventListener('pointermove', (e) => {
+        if (e.pointerId !== this.pointerId) return;
+        e.preventDefault();
+        updateStick(e.clientX, e.clientY);
+      });
+
+      const release = (e) => {
+        if (e.pointerId !== this.pointerId) return;
+        this.resetStick();
+      };
+      this.zone.addEventListener('pointerup', release);
+      this.zone.addEventListener('pointercancel', release);
+
+      // Multi-touch safe Interact button
+      this.btnInteract.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        audioManager.init();
+        const ws = window.valeUI?.game?.scene?.getScene('WorldScene');
+        if (ws && ws.scene.isActive() && !gameState.isUIOpen()) {
+          ws.triggerInteract();
+        }
+      });
+    }
+
+    resetStick() {
+      this.pointerId = null;
+      window.mobileInput.x = 0;
+      window.mobileInput.y = 0;
+      if (this.knob) this.knob.style.transform = 'translate(-50%, -50%)';
+    }
+
+    setEnabled(on) {
+      this.enabled = Boolean(on);
+      document.body.classList.toggle('touch-mode', this.enabled);
+      this.resetStick();
+      this.refreshVisibility();
+    }
+
+    setInteractReady(isReady, label = '') {
+      if (!this.btnInteract) return;
+      this.btnInteract.classList.toggle('ready', isReady);
+      this.btnInteract.textContent = isReady ? 'TALK' : 'ACT';
+      if (isReady && label.includes('Enter')) this.btnInteract.textContent = 'ENTER';
+      else if (isReady && label.includes('Exit')) this.btnInteract.textContent = 'EXIT';
+      else if (isReady && label.includes('Inspect')) this.btnInteract.textContent = 'CHECK';
+      else if (isReady && label.includes('Build')) this.btnInteract.textContent = 'BUILD';
+    }
+
+    refreshVisibility() {
+      if (!this.wrap) return;
+      const inMenu = window.valeUI ? window.valeUI.inMainMenu : true;
+      const show = this.enabled && !inMenu && !gameState.isUIOpen();
+      this.wrap.classList.toggle('hidden', !show);
+    }
+  }
+
+  const mobileControls = new MobileControls();
+  window.mobileControls = mobileControls;
 
   /* =========================================================
      2. AUDIO MANAGER (LOOPING MP3 + EXPRESSIVE CHARACTER VOICES)
@@ -515,6 +650,7 @@
       this.sfxVolume = 0.7;
       this.bgmAudio = null;
       this.bgmSrc = './bgm.mp3';
+      this.voiceClips = {};
     }
     init() {
       if (!this.ctx) {
@@ -572,6 +708,20 @@
     playVoice(voiceCfg) {
       if (!this.ctx || this.sfxVolume <= 0.01) return;
       const v = voiceCfg || { freq: 410, type: 'triangle', jitter: 45 };
+      
+      if (v.src) {
+        let clip = this.voiceClips[v.src];
+        if (!clip) {
+          clip = new Audio(v.src);
+          clip.preload = 'auto';
+          this.voiceClips[v.src] = clip;
+        }
+        clip.volume = this.sfxVolume;
+        clip.currentTime = 0;
+        clip.play().catch(() => {});
+        return;
+      }
+      
       try {
         const now = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
@@ -1096,62 +1246,62 @@
       addCanvasTex('amber_glow', c);
     }
 
-    const PAL_PLAYER = { skin: '#f2c9a0', hair: '#5a3418', top: '#3b5a8a', bot: '#4a4a58', sc: '#c0392b', pk: true };
-    const PAL_MAYA = { skin: '#f6d3b0', hair: '#6b3a22', top: '#b84a3a', bot: '#b84a3a', sk: true, lg: true, rb: true };
-    const PAL_MAYA_MECH = { skin: '#f6d3b0', hair: '#6b3a22', top: '#efe3c8', bot: '#3a4f7a', lg: true, rb: true, wrench: true };
-    const PAL_FATHER = { skin: '#f0c49a', hair: '#6b4a2a', top: '#8a5a2a', bot: '#4a3a2a', mu: true };
-    const PAL_MOTHER = { skin: '#f3cba4', hair: '#8a4a2a', top: '#d46a6a', bot: '#e8d6b8', sk: true, bn: true };
-    const PAL_BROTHER = { skin: '#f2c9a0', hair: '#6b3a1e', top: '#5a8a5a', bot: '#4a4a58' };
-    const PAL_MERCHANT = { skin: '#e8b890', hair: '#4a3020', top: '#3a6a4a', bot: '#5a4a3a', ap: true };
-    const PAL_GUILD = { skin: '#f5d0aa', hair: '#3b2a4a', top: '#4a5a8a', bot: '#3a4a6a', lg: true, bn: true };
-    const PAL_COUNCILOR = { skin: '#ecc299', hair: '#cfd2dc', top: '#583b6e', bot: '#2e223d', sc: '#e8b84a', mu: true };
-    const PAL_VILLAGER1 = { skin: '#efc9a8', hair: '#cfcfd8', top: '#7a4a6a', bot: '#7a4a6a', sk: true, bn: true };
-    const PAL_VILLAGER2 = { skin: '#e8b890', hair: '#6a4a2a', top: '#5a6a7a', bot: '#4a5a3a', ht: '#d9b45a' };
+    const drawPixelGrid = (ctx, grid, palette, ox = 0, oy = 0, scale = 1) => {
+      for (let r = 0; r < grid.length; r++) {
+        const row = grid[r];
+        for (let col = 0; col < row.length; col++) {
+          const ch = row[col];
+          if (palette[ch]) px(ctx, ox + col * scale, oy + r * scale, scale, scale, palette[ch]);
+        }
+      }
+    };
 
-    PORTRAITS.portrait_maya_sad = drawPortraitDataURL(PAL_MAYA);
-    PORTRAITS.portrait_maya_happy = drawPortraitDataURL(PAL_MAYA_MECH, true);
-    PORTRAITS.portrait_parents = drawPortraitDataURL(PAL_FATHER);
-    PORTRAITS.portrait_mother = drawPortraitDataURL(PAL_MOTHER);
-    PORTRAITS.portrait_brother = drawPortraitDataURL(PAL_BROTHER);
-    PORTRAITS.portrait_merchant = drawPortraitDataURL(PAL_MERCHANT);
-    PORTRAITS.portrait_guild = drawPortraitDataURL(PAL_GUILD);
-    PORTRAITS.portrait_councilor = drawPortraitDataURL(PAL_COUNCILOR);
-    PORTRAITS.portrait_villager = drawPortraitDataURL(PAL_VILLAGER1);
-    PORTRAITS.portrait_villager2 = drawPortraitDataURL(PAL_VILLAGER2);
-    PORTRAITS.portrait_sans = drawSansPortraitDataURL();
-
+    const playerSkin = SKINS.player;
     ['down', 'up', 'left', 'right'].forEach((dir) => {
       for (let step = 0; step < 4; step++) {
         const { c, ctx } = makeCanvas(20, 24);
-        drawCharacterSprite(ctx, 0, 0, { ...PAL_PLAYER, facing: dir, step });
+        drawCharacterSprite(ctx, 0, 0, { ...playerSkin, facing: dir, step });
         addCanvasTex(`player_${dir}_${step}`, c);
       }
     });
 
-    const npcs = {
-      npc_maya_sad: PAL_MAYA,
-      npc_maya_mech: PAL_MAYA_MECH,
-      npc_father: PAL_FATHER,
-      npc_mother: PAL_MOTHER,
-      npc_brother: PAL_BROTHER,
-      npc_merchant: PAL_MERCHANT,
-      npc_guild: PAL_GUILD,
-      npc_councilor: PAL_COUNCILOR,
-      npc_villager1: PAL_VILLAGER1,
-      npc_villager2: PAL_VILLAGER2
-    };
-    Object.entries(npcs).forEach(([key, cfg]) => {
-      const { c, ctx } = makeCanvas(20, 24);
-      drawCharacterSprite(ctx, 0, 0, { ...cfg, facing: 'down', step: 0 });
-      addCanvasTex(key, c);
+    Object.entries(SKINS).forEach(([key, cfg]) => {
+      if (key === 'player') return;
+
+      if (cfg.grid && cfg.palette) {
+        const w = cfg.w || cfg.grid[0].length;
+        const h = cfg.h || cfg.grid.length;
+        const { c, ctx } = makeCanvas(w, h);
+        drawPixelGrid(ctx, cfg.grid, cfg.palette, 0, 0, 1);
+        addCanvasTex(key, c);
+      } else {
+        const { c, ctx } = makeCanvas(20, 24);
+        drawCharacterSprite(ctx, 0, 0, { ...cfg, facing: 'down', step: 0 });
+        addCanvasTex(key, c);
+      }
+
+      if (cfg.portrait) {
+        if (cfg.portraitGrid && cfg.portraitPalette) {
+          const scale = cfg.portraitScale || 2;
+          const pw = cfg.portraitGrid[0].length * scale;
+          const ph = cfg.portraitGrid.length * scale;
+          const { c, ctx } = makeCanvas(pw, ph);
+          if (cfg.portraitBg) px(ctx, 0, 0, pw, ph, cfg.portraitBg);
+          drawPixelGrid(ctx, cfg.portraitGrid, cfg.portraitPalette, 0, 0, scale);
+          PORTRAITS[cfg.portrait] = c.toDataURL();
+        } else {
+          PORTRAITS[cfg.portrait] = drawPortraitDataURL(cfg, Boolean(cfg.isMayaJournal));
+        }
+      }
     });
 
-    // Sans sprite
-    {
+    // Fallback Sans sprite & portrait (Step 4 overrides these from data.js SKINS)
+    if (!scene.textures.exists('npc_sans')) {
       const { c, ctx } = makeCanvas(20, 24);
       drawSansSprite(ctx);
       addCanvasTex('npc_sans', c);
     }
+    if (!PORTRAITS.portrait_sans) PORTRAITS.portrait_sans = drawSansPortraitDataURL();
 
     // Green Mark, Quest Bubble, Heart, Firefly/Leaf particle
     {
@@ -1229,11 +1379,11 @@
       el(ctx, cx + 3 * s, cy, 12 * s, 3 * s, 'rgba(10,8,20,0.4)');
       px(ctx, cx - 3 * s, cy - 10 * s, 6 * s, 10 * s, '#5a3418');
       px(ctx, cx + s, cy - 10 * s, 2 * s, 10 * s, '#3f2410');
-      blob(ctx, cx, cy - 24 * s, 13 * s, '#214521');
-      blob(ctx, cx - 3 * s, cy - 26 * s, 11 * s, '#2b5e29');
-      blob(ctx, cx + 4 * s, cy - 22 * s, 8 * s, '#367531');
-      blob(ctx, cx - 2 * s, cy - 29 * s, 6 * s, '#438a3b');
-      blob(ctx, cx + 5 * s, cy - 30 * s, 4 * s, '#c99c3c');
+      blob(ctx, cx, cy - 20 * s, 13 * s, '#214521');
+      blob(ctx, cx - 3 * s, cy - 22 * s, 11 * s, '#2b5e29');
+      blob(ctx, cx + 4 * s, cy - 18 * s, 8 * s, '#367531');
+      blob(ctx, cx - 2 * s, cy - 25 * s, 6 * s, '#438a3b');
+      blob(ctx, cx + 5 * s, cy - 26 * s, 4 * s, '#c99c3c');
       addCanvasTex('prop_oak', c);
     }
 
@@ -1583,12 +1733,9 @@
         E: Phaser.Input.Keyboard.KeyCodes.E
       });
 
+
       this.input.keyboard.on('keydown-E', () => {
-        if (gameState.isUIOpen()) return;
-        if (this.nearestInteractable) {
-          audioManager.playClick();
-          this.nearestInteractable.onInteract();
-        }
+        this.triggerInteract();
       });
 
       this._onPostRender = () => this.syncDomLabels();
@@ -1603,6 +1750,14 @@
       if (this.celebrationMode && !gameState.state.quests.mayas_shadow.rewardsClaimed) {
         this.spawnCelebrationEffects();
         this.time.delayedCall(650, () => window.valeUI?.openQuestSuccess('mayas_shadow'));
+      }
+    }
+
+    triggerInteract() {
+      if (gameState.isUIOpen()) return;
+      if (this.nearestInteractable) {
+        audioManager.playClick();
+        this.nearestInteractable.onInteract();
       }
     }
 
@@ -1805,12 +1960,6 @@
         this.addSolid(x, y - 6, 20, 12);
       });
 
-      // EASTER EGG: SANS THE SKELETON lounging under the west streetlight!
-      this.addSortedSprite(106, 336, 'npc_sans');
-      this.addSolid(106, 332, 12, 8);
-      this.addLabel(106, 354, 'sans', 'sans-label');
-      this.addInteractable(106, 336, 36, '[E] Talk to sans', () => window.valeUI.startSansEasterEgg());
-
       // MAYA outside workshop
       if (!questDone) {
         this.addSortedSprite(154, 214, 'npc_maya_sad');
@@ -1994,6 +2143,12 @@
       this.addLabel(320, 198, gameState.state.marketplaceDiscountActive ? 'Barnaby (15% OFF!)' : 'Merchant Barnaby');
       this.addInteractable(320, 186, 44, '[E] Browse Marketplace', () => window.valeUI.openMarketplace());
 
+      // EASTER EGG: SANS THE SKELETON lounging under the west streetlight!
+      this.addSortedSprite(530, 195, 'npc_sans');
+      this.addSolid(530, 195, 12, 8);
+      this.addLabel(530, 209, 'sans the skeleton', 'sans-label');
+      this.addInteractable(530, 195, 36, '[E] Talk to sans', () => window.valeUI.startSansEasterEgg());
+
       this.spawnWanderingVillager(180, 250, 'npc_villager1', 'Shopper', () => {
         window.valeUI.openNpcChat(
           'villager_anna',
@@ -2029,6 +2184,8 @@
       this.addSolid(145, 160, 20, 12);
       this.addSortedSprite(540, 168, 'prop_oak');
       this.addSolid(540, 160, 20, 12);
+
+      
 
       this.addSortedSprite(340, 218, 'npc_guild');
       this.addSolid(340, 214, 12, 8);
@@ -2157,7 +2314,8 @@
       }
 
       const speed = 108;
-      let vx = 0, vy = 0;
+      let vx = window.mobileInput.x || 0;
+      let vy = window.mobileInput.y || 0;
       if (this.cursors.left.isDown || this.keys.A.isDown) vx -= 1;
       if (this.cursors.right.isDown || this.keys.D.isDown) vx += 1;
       if (this.cursors.up.isDown || this.keys.W.isDown) vy -= 1;
@@ -2190,6 +2348,7 @@
         if (d <= obj.radius && d < bestDist) { bestDist = d; nearest = obj; }
       }
       this.nearestInteractable = nearest;
+      mobileControls.setInteractReady(Boolean(nearest), nearest ? nearest.label : '');
     }
   }
 
@@ -2303,6 +2462,22 @@
         fbBtn.textContent = '💬 Story Feedback & Ideas';
         fbBtn.onclick = () => { audioManager.playClick(); this.openFeedbackTool(); };
         setActions.insertBefore(fbBtn, this.el.btnSetResume);
+      }
+
+      if (setActions && !document.getElementById('btn-set-touch')) {
+        const touchBtn = document.createElement('button');
+        touchBtn.id = 'btn-set-touch';
+        touchBtn.className = 'wood-btn';
+        const syncLabel = () => {
+          touchBtn.textContent = `📱 Touch Controls: ${mobileControls.enabled ? 'ON' : 'OFF'}`;
+        };
+        syncLabel();
+        touchBtn.onclick = () => {
+          audioManager.playClick();
+          mobileControls.setEnabled(!mobileControls.enabled);
+          syncLabel();
+        };
+        setActions.insertBefore(touchBtn, this.el.btnSetResume);
       }
     }
 
@@ -2488,6 +2663,7 @@
       this.game.scene.stop('MainMenuScene');
       this.game.scene.start('WorldScene', { zone, spawn });
       this.refreshHUD();
+      mobileControls.refreshVisibility();
     }
 
     returnToMainMenu() {
@@ -2498,6 +2674,7 @@
       this.game.scene.stop('WorldScene');
       this.game.scene.start('MainMenuScene');
       this.refreshMainMenuButtons();
+      mobileControls.refreshVisibility();
     }
 
     onZoneEntered(zone) {
@@ -2621,126 +2798,100 @@
     }
 
     // ---- EASTER EGG: SANS THE SKELETON ----
-    startSansEasterEgg() {
-      this.showDialogue({
-        charKey: 'sans',
-        mood: 'ironic',
-        text: "heya kid, beautiful day isn't it?",
-        choices: [
-          {
-            icon: '🌙',
-            tag: 'POINT OUT THE OBVIOUS',
-            label: "Uh... it's literally nighttime.",
-            onSelect: () => {
-              this.showDialogue({
-                charKey: 'sans',
-                mood: 'grinning',
-                text: "heh. guess i lost track of time under this streetlight. lanterns are glowing, fireflies are floating... on nights like these, kids like you should be breaking a few unfair stereotypes instead of taking shortcuts."
-              });
-            }
-          },
-          {
-            icon: '💀',
-            tag: 'ASK ABOUT VALE',
-            label: 'Wait—how did a skeleton get into a cozy village RPG?',
-            onSelect: () => {
-              this.showDialogue({
-                charKey: 'sans',
-                mood: 'lazy wink',
-                text: "took a wrong turn at grillby's. figured i'd stay a while—this place has got a ton of heart. ...and a skeleton of potential. heh. alright kid, go help maya build that loom before i start telling bad puns."
-              });
-            }
-          }
-        ]
-      });
+    // ---- DATA-DRIVEN DIALOGUE RUNNER (READS DIALOGUES FROM data.js) ----
+    checkDialogueFlag(flag) {
+      if (flag === 'heardLeo') return Boolean(gameState.state.heardLeo);
+      if (flag === 'hasLoom') return gameState.getItemQty('prototype_loom') > 0 || gameState.state.loomBuilt;
+      if (flag === 'has3Comp') return gameState.getItemQty('mechanical_components') >= 3;
+      if (flag === 'act1Done') return gameState.state.quests.mayas_shadow.completed;
+      return false;
     }
 
-    // ---- ACT 1: MAYA'S SHADOW ----
-    startMayaDialogue() {
-      if (gameState.state.quests.mayas_shadow.stage === 'not_started') {
-        gameState.setQuestStage('mayas_shadow', 'talked');
+    formatDialogueText(str) {
+      if (!str) return '';
+      return str
+        .replace(/\{comp\}/g, String(gameState.getItemQty('mechanical_components')))
+        .replace(/\{sc\}/g, String(gameState.state.socialCredibility));
+    }
+
+    runDialogueActions(actions = []) {
+      for (const act of actions) {
+        const parts = act.split(':');
+        const cmd = parts[0];
+        if (cmd === 'stage') gameState.setQuestStage(parts[1], parts[2]);
+        else if (cmd === 'approach') gameState.recordApproach(parts[1], parts[2]);
+        else if (cmd === 'restorative') { gameState.state.restorativeNeeded = parts[1] === 'true'; gameState.save(); }
+        else if (cmd === 'heardLeo') gameState.markHeardLeo();
+        else if (cmd === 'consume') gameState.consumeItem(parts[1], Number(parts[2] || 1));
+        else if (cmd === 'sfx') {
+          if (parts[1] === 'buildClink') audioManager.playBuildClink();
+          else if (parts[1] === 'fanfare') audioManager.playFanfare();
+          else if (parts[1] === 'coin') audioManager.playCoin();
+        } else if (cmd === 'toast') this.toast(parts.slice(1).join(':'));
+        else if (cmd === 'unlockJournal') {
+          if (gameState.unlockJournalEntry(parts[1])) this.toast('📖 New Sandbox Entry Unlocked: Mending Trust!');
+        } else if (cmd === 'openJournal') this.openJournal();
+        else if (cmd === 'questSuccess') this.openQuestSuccess(parts[1]);
+        else if (cmd === 'close') this.closeAllModals();
+        else if (cmd === 'enter') {
+          this.closeAllModals();
+          this.game.scene.getScene('WorldScene').transitionTo(parts[1], { x: Number(parts[2]), y: Number(parts[3]) });
+        } else if (cmd === 'enterCelebration') {
+          this.closeAllModals();
+          this.game.scene.getScene('WorldScene').transitionTo(parts[1], { x: Number(parts[2]), y: Number(parts[3]) }, true);
+        }
       }
-      this.showDialogue({
-        charKey: 'maya',
-        mood: 'Guarded',
-        text: '*Maya wipes a smudge of machine oil onto her apron and sighs.* "It\'s not that simple... I want to study engineering, not spend forty years hem-stitching coats. My parents—Arthur and Clara—expect me to inherit the tailor shop instead of my brother Leo. Every time I bring up the Academy, Dad looks like I\'ve asked him to burn the place down."',
-        choices: [
-          { icon: '❤️', tag: 'EMPATHY', label: 'You love them, and you still want your own life. Tell me what you build when no one is looking.', onSelect: () => this.mayaEmpathyBranch() },
-          { icon: '⚖️', tag: 'SKEPTICISM', label: 'A forty-year family shop is real security. Maybe engineering is a luxury Vale can’t afford right now.', onSelect: () => this.mayaSkepticismBranch() },
-          { icon: '🤝', tag: 'DIPLOMACY', label: 'Sometimes parents hear an outsider better than their own daughter. Let me sit down with Arthur and Clara.', onSelect: () => this.mayaDiplomacyBranch() },
-          { icon: '📐', tag: 'ACTION / EVIDENCE', label: 'Dreams sound fragile—proof doesn’t. Let’s look at your mechanical blueprints and put them right on their counter.', onSelect: () => this.mayaEvidenceBranch() }
-        ]
-      });
     }
 
-    mayaEmpathyBranch() {
-      gameState.recordApproach('mayas_shadow', 'empathy');
-      this.showDialogue({
-        charKey: 'maya',
-        mood: 'Opening Up',
-        text: '*Her shoulders drop an inch, and a real spark flashes in her eyes.* "Nobody here ever asks what I build—only whether my seams are straight. After closing, I stay up repairing the shop’s old cast-iron sewing machine. I even drafted a spring-loaded tensioner so Mom’s wrists stop aching after long winters... And Leo actually *loves* tailoring! He just thinks Dad won’t trust him with the shears."',
-        choices: [
-          { icon: '🤝', tag: 'DIPLOMACY', label: 'Then this isn’t rebellion—it’s a better plan for everyone. Let’s step inside and inspect your workbench.', onSelect: () => this.mayaDiplomacyBranch() },
-          { icon: '📐', tag: 'CHECK BLUEPRINTS', label: 'Show me that workbench inside—once I’ve seen your blueprint, we’ll bring it straight to Arthur and Clara.', onSelect: () => this.mayaEvidenceBranch() }
-        ]
-      });
-    }
+    playDialogueNode(nodeId) {
+      const node = DIALOGUES[nodeId];
+      if (!node) {
+        console.warn('Missing dialogue node in data.js:', nodeId);
+        return;
+      }
+      if (node.onEnter) this.runDialogueActions(node.onEnter);
 
-    mayaSkepticismBranch() {
-      gameState.recordApproach('mayas_shadow', 'skepticism');
-      gameState.state.restorativeNeeded = true;
-      gameState.save();
-      this.showDialogue({
-        charKey: 'maya',
-        mood: 'Stung & Defiant',
-        text: '*Maya’s jaw tightens as she folds her arms.* "Funny—you sound just like the village elders. Tell me: why is it *my* duty to sacrifice my future when Leo is standing ten feet inside wishing someone would hand him tailor’s chalk? I don’t want to wreck my family’s livelihood. I just refuse to be invisible inside it."',
-        choices: [
-          {
-            icon: '🙏', tag: 'OWN YOUR MISTAKE', label: 'You’re right—I jumped to assumptions without hearing the whole story. Start over with me?',
-            onSelect: () => { gameState.state.restorativeNeeded = false; gameState.save(); this.mayaEmpathyBranch(); }
-          },
-          {
-            icon: '🤝', tag: 'BUILD A REAL CASE', label: 'Fair hit. If Arthur needs hard proof instead of speeches, let’s check your workbench and make a case he can’t ignore.',
-            onSelect: () => { gameState.state.restorativeNeeded = false; gameState.save(); this.mayaEvidenceBranch(); }
+      const choices = (node.choices || [])
+        .filter((ch) => {
+          if (ch.when && !this.checkDialogueFlag(ch.when)) return false;
+          if (ch.whenNot && this.checkDialogueFlag(ch.whenNot)) return false;
+          return true;
+        })
+        .map((ch) => ({
+          icon: ch.icon,
+          tag: ch.tag,
+          label: this.formatDialogueText(ch.label),
+          onSelect: () => {
+            if (ch.actions) this.runDialogueActions(ch.actions);
+            if (ch.next) this.playDialogueNode(ch.next);
           }
-        ]
-      });
-    }
+        }));
 
-    mayaDiplomacyBranch() {
-      gameState.recordApproach('mayas_shadow', 'diplomacy');
-      gameState.setQuestStage('mayas_shadow', 'family_meeting');
-      this.showDialogue({
-        charKey: 'maya',
-        mood: 'Cautiously Hopeful',
-        text: '*Maya glances toward the workshop door.* "I warn you—my father Arthur isn’t cruel, he’s terrified. If you walk up to him empty-handed, he’ll shut the ledger and wave you off. Step inside, inspect my blueprint on the right-hand workbench first, and then talk to Arthur and Clara!"',
-        nextAction: {
-          label: "Enter Maya's Workshop",
-          onClick: () => {
-            this.closeAllModals();
-            this.game.scene.getScene('WorldScene').transitionTo('tailor_shop', { x: 240, y: 248 });
+      const nextAction = node.nextAction
+        ? {
+            label: node.nextAction.label,
+            onClick: () => {
+              if (node.nextAction.actions) this.runDialogueActions(node.nextAction.actions);
+              if (node.nextAction.next) this.playDialogueNode(node.nextAction.next);
+            }
           }
-        }
-      });
-    }
+        : null;
 
-    mayaEvidenceBranch() {
-      gameState.recordApproach('mayas_shadow', 'evidence');
-      gameState.setQuestStage('mayas_shadow', 'family_meeting');
       this.showDialogue({
-        charKey: 'maya',
-        mood: 'Determined',
-        text: '*Maya smiles for the first time all evening.* "Now you’re thinking like an engineer! My loom-tensioner blueprints are spread out on the right-hand workbench inside. Go look them over first—and chat with Leo if you get a moment—then bring them to Arthur and Clara!"',
-        nextAction: {
-          label: 'Enter Workshop & Inspect Workbench',
-          onClick: () => {
-            this.closeAllModals();
-            this.game.scene.getScene('WorldScene').transitionTo('tailor_shop', { x: 240, y: 248 });
-          }
-        }
+        charKey: node.charKey,
+        mood: node.mood || 'Thoughtful',
+        text: this.formatDialogueText(node.text),
+        showBlueprint: Boolean(node.showBlueprint),
+        choices,
+        nextAction
       });
     }
 
+    startSansEasterEgg() { this.playDialogueNode('sans_intro'); }
+    startMayaDialogue() {
+      if (gameState.state.quests.mayas_shadow.stage === 'not_started') gameState.setQuestStage('mayas_shadow', 'talked');
+      this.playDialogueNode('maya_intro');
+    }
     pickupBlueprints() {
       if (gameState.collectBlueprints(REWARD_ITEMS.maya_blueprints)) {
         audioManager.playCoin();
@@ -2748,376 +2899,36 @@
       }
       this.inspectWorkbenchBlueprints();
     }
-
-    inspectWorkbenchBlueprints() {
-      this.showDialogue({
-        charKey: 'maya',
-        mood: 'Blueprint Examined',
-        showBlueprint: true,
-        text: '*You unroll crisp indigo vellum covered in precision gear ratios and neat margin notes:* "Prototype IV — self-tensioning loom governor. Reduces hand-crank torque by 60% so Mother’s wrists stop swelling in winter." This isn’t a daydream—it’s real engineering built out of love for her family.',
-        nextAction: {
-          label: gameState.state.quests.mayas_shadow.completed ? 'Close Blueprint' : "Got it — Talk to Maya's Parents",
-          onClick: () => this.closeAllModals()
-        }
-      });
-    }
-
+    inspectWorkbenchBlueprints() { this.playDialogueNode('blueprint_view'); }
     startLeoDialogue() {
-      if (gameState.state.quests.mayas_shadow.completed) {
-        this.showDialogue({
-          charKey: 'leo',
-          mood: 'Beaming',
-          text: '*Leo holds up a freshly chalked wool sleeve, grinning ear to ear.* "Dad actually let me cut the collar pattern today—first try, zero wasted cloth! Once you and Maya finish building that Prototype IV loom tensioner, our shop will double its winter orders."'
-        });
-        return;
-      }
-
-      gameState.markHeardLeo();
-      this.showDialogue({
-        charKey: 'leo',
-        mood: 'Confiding',
-        text: '*Leo glances at Arthur, then lowers his voice.* "Everyone thinks I’m clumsy with a needle because I panic when Dad watches over my shoulder. Look at that terracotta dress on the mannequin—I stitched that hem myself after closing! I *want* to run this shop someday. Nobody ever asked me because they already decided the eldest daughter had to do it."',
-        nextAction: {
-          label: 'Promise to Speak Up for Him',
-          onClick: () => {
-            this.toast('🧵 Insight Gained: Leo wants to inherit the tailor shop!');
-            this.closeAllModals();
-          }
-        }
-      });
+      this.playDialogueNode(gameState.state.quests.mayas_shadow.completed ? 'leo_after' : 'leo_before');
     }
-
     startParentsDialogue() {
       if (gameState.state.quests.mayas_shadow.completed) {
-        this.showDialogue({
-          charKey: 'arthur',
-          mood: 'Warm & Proud',
-          text: gameState.state.quests.mayas_loom.completed
-            ? '*Arthur beams as Clara smoothly turns the upgraded loom crank.* "Look at that—barely a flick of the wrist! The Highland Council will be fools if they don’t listen to you and Maya."'
-            : '*Arthur adjusts his spectacles and chuckles.* "Forty years behind this counter, and it took a stranger to make me listen to my own roof. If you’re helping Maya actually build that Prototype IV tensioner at her bench, Barnaby at the Marketplace carries brass Mechanical Components!"'
-        });
+        this.playDialogueNode(gameState.state.quests.mayas_loom.completed ? 'parents_after_act2' : 'parents_after_act1');
         return;
       }
-
       if (!gameState.state.hasBlueprints) {
-        this.toast("📐 Inspect Maya's Workbench on the right first!");
-        this.showDialogue({
-          charKey: 'arthur',
-          mood: 'Skeptical',
-          text: '*Arthur doesn’t even look up from his ledger.* "Before you waste my evening lecturing me about Maya’s \'engineering talent\', traveler, walk over to her cluttered workbench on the right and actually look at what she’s been hiding there. Don’t come preaching to me without proof."'
-        });
+        this.playDialogueNode('parents_need_blueprint');
         return;
       }
-
-      const heardLeo = gameState.state.heardLeo;
-      this.showDialogue({
-        charKey: 'arthur',
-        mood: 'Defensive',
-        text: '*Arthur sets his tailor’s chalk down hard on the counter while Clara watches nervously beside him.* "All right, traveler—you’ve seen her workbench, so say your piece. Ten winters ago this shop barely survived frostbite and debt. Maya has steady hands; engineering is a gamble for guild-kids—not a tailor’s daughter."',
-        choices: [
-          { icon: '📐', tag: 'PRESENT BLUEPRINT', label: 'Unroll Prototype IV right here on the counter—she engineered it to save Clara’s aching wrists.', onSelect: () => this.parentsStageTwo('evidence') },
-          {
-            icon: '🧵', tag: heardLeo ? "LEO'S CONFESSION" : 'ASK ABOUT LEO',
-            label: heardLeo ? 'Ask Leo who stitched that terracotta dress on the mannequin—he wants this shop more than anyone.' : 'Why force Maya when you have a son right here who could take over?',
-            onSelect: () => (heardLeo ? this.parentsStageTwo('leo') : this.parentsPushback('unprepared_leo'))
-          },
-          { icon: '🔥', tag: 'CONFRONT BIAS', label: 'Admit it, Arthur—if Maya were your son, you’d have walked her to the Academy gates yourself.', onSelect: () => this.parentsPushback('too_harsh') }
-        ]
-      });
+      this.playDialogueNode('parents_start');
     }
-
-    parentsPushback(reason) {
-      if (reason === 'unprepared_leo') {
-        this.showDialogue({
-          charKey: 'clara',
-          mood: 'Hesitant',
-          text: '*Clara glances worriedly at Leo, who shrinks back toward the wall.* "Leo always drops his thimble when Arthur watches him... We never thought he even cared for cloth. Have you actually spoken to him, or are you guessing?"',
-          choices: [
-            { icon: '💬', tag: 'TALK TO LEO FIRST', label: 'Let me speak with Leo privately first—you’re about to be surprised.', onSelect: () => this.closeAllModals() },
-            { icon: '📐', tag: 'SHOW BLUEPRINT INSTEAD', label: 'Before Leo speaks, look at what Maya drew on her workbench.', onSelect: () => this.parentsStageTwo('evidence') }
-          ]
-        });
-      } else {
-        this.showDialogue({
-          charKey: 'clara',
-          mood: 'Hurt & Firm',
-          text: '*Clara steps beside Arthur, her voice quiet but sharp.* "Watch your tone, traveler. Arthur worked his knuckles raw so both our children could eat—not out of spite, out of fear! Scolding us won’t help Maya. Show us what you found on her bench and help us see a real way forward."',
-          choices: [
-            { icon: '📐', tag: 'APOLOGIZE & SHOW PROOF', label: 'I crossed a line. You’ve carried a heavy load—please, just look at Maya’s blueprint.', onSelect: () => this.parentsStageTwo('evidence') }
-          ]
-        });
-      }
-    }
-
-    parentsStageTwo(angle) {
-      const showBp = angle === 'evidence';
-      const opening =
-        angle === 'evidence'
-          ? '*You spread Maya’s indigo blueprint flat across the oak counter. Arthur leans in, his fingers tracing the gear ratios—then freezes at her margin note about Clara’s wrists. Silence fills the workshop.*'
-          : angle === 'leo'
-          ? '*Leo steps forward, cheeks flushed, lifting the hem of the terracotta dress.* "I stitched that after closing, Dad. I love fabrics—I was just scared of disappointing you." *Clara’s hand flies to her mouth.*'
-          : '*Clara exhales softly and lays a hand over Arthur’s wrist.* "Maybe we’ve been so afraid of losing the past that we stopped listening to our own children..."';
-
-      this.showDialogue({
-        charKey: 'clara',
-        mood: 'Torn but Listening',
-        showBlueprint: showBp,
-        text: `${opening}\n\n"Still..." *Clara’s voice trembles.* "If Maya goes off to the Innovation Guild, who keeps the shop steady while Leo is still learning? Tradition isn’t our enemy—we just need a plan that doesn’t leave anyone stranded."`,
-        choices: [
-          { icon: '⚖️', tag: 'HALF-MEASURE', label: 'Tell Maya to work the shop six days a week and only tinker with gears on Sundays.', onSelect: () => this.parentsRejectCompromise() },
-          { icon: '🤝', tag: 'SHARED FUTURE', label: 'Maya installs her loom-tensioner to lighten your workload, teaches Leo her best patterns, and applies to the Academy with your blessing.', onSelect: () => this.parentsBreakthrough() }
-        ]
-      });
-    }
-
-    parentsRejectCompromise() {
-      this.showDialogue({
-        charKey: 'maya',
-        mood: 'Firm',
-        text: '*Maya shakes her head softly, eyes glistening—and surprisingly, Clara nods with her.* "A Sunday hobby isn’t an education, traveler. The Academy exams take real study." *Clara adds gently:* "If we’re going to change, let’s not do it halfway."',
-        nextAction: { label: 'Propose a Real Solution', onClick: () => this.parentsStageTwo('evidence') }
-      });
-    }
-
-    parentsBreakthrough() {
-      this.showDialogue({
-        charKey: 'arthur',
-        mood: 'Moved & Proud',
-        showBlueprint: true,
-        text: '*For a long moment, Arthur says nothing. Then he rolls Maya’s blueprint carefully and ties it with a ribbon of his finest scarlet silk.* "A self-tensioning loom... designed for your mother’s hands. Forgive an old tailor for being blind, Maya. Send your application to the Innovation Guild—we’ll back every brass gear of it. And Leo... grab a piece of chalk. Tomorrow, you stand at the main counter beside me."',
-        nextAction: {
-          label: 'Celebrate with the Family ✨',
-          onClick: () => {
-            this.closeAllModals();
-            this.game.scene.getScene('WorldScene').transitionTo('tailor_shop', { x: 240, y: 238 }, true);
-          }
-        }
-      });
-    }
-
-    // ---- ACT 2: MAYA'S DEEPER STORY + BUILD TOOL QUEST (PROTOTYPE IV LOOM) ----
     startMayaPostQuestDialogue() {
-      if (gameState.state.quests.highland_hearing.completed) {
-        this.showDialogue({
-          charKey: 'maya_happy',
-          mood: 'Triumphant',
-          text: '*Maya taps her brass wrench emblem against the signed Equal-Access Charter.* "We went from hiding sketches under bolts of cloth to rewriting valley law. Thank you for walking every step of this road with me, traveler!"'
-        });
-        return;
-      }
-
-      if (gameState.state.quests.mayas_loom.completed) {
-        this.showDialogue({
-          charKey: 'maya_happy',
-          mood: 'Determined',
-          text: '*Maya holds the gleaming Prototype IV Loom Governor.* "Prototype IV works like silk! Now that your Social Credibility has reached 50, the northern gate to the Highland Council is open. Let’s meet up there—or fast-travel on the Map [M]—and challenge those outdated guild bylaws!"'
-        });
-        return;
-      }
-
-      const comp = gameState.getItemQty('mechanical_components');
-      this.showDialogue({
-        charKey: 'maya_happy',
-        mood: 'Excited & Focused',
-        showBlueprint: true,
-        text: `*Maya grins, unrolling her blueprint under the lantern.* "Guildmaster Elena loved my paper application, but the Highland Council still blocks women from funded engineering fellowships unless we bring a working machine! If we gather 3 Mechanical Components (you have ${comp}/3—try unpacking the Parts Chest in your Bag [I] and buying the rest at Barnaby's 15%-off Marketplace), we can build Prototype IV right at my Workbench inside!"`,
-        nextAction: {
-          label: comp >= 3 ? "Head to Maya's Workbench" : 'Open Bag [I] / Check Marketplace',
-          onClick: () => {
-            this.closeAllModals();
-            if (comp >= 3 && gameState.state.currentLocation !== 'tailor_shop') {
-              this.game.scene.getScene('WorldScene').transitionTo('tailor_shop', { x: 320, y: 224 });
-            }
-          }
-        }
-      });
+      if (gameState.state.quests.highland_hearing.completed) this.playDialogueNode('maya_after_highland');
+      else if (gameState.state.quests.mayas_loom.completed) this.playDialogueNode('maya_after_loom');
+      else this.playDialogueNode('maya_act2');
     }
-
     startElenaDialogue() {
-      const loomDone = gameState.state.quests.mayas_loom.completed;
-      const hearingDone = gameState.state.quests.highland_hearing.completed;
-      if (hearingDone) {
-        this.showDialogue({
-          charKey: 'elena',
-          mood: 'Inspired',
-          text: '"With the Vale Equal-Access Charter passed, twelve young girls and boys signed up for open robotics and tailoring-automation classes this very evening. Real change starts when talent meets policy."'
-        });
-      } else if (loomDone) {
-        this.showDialogue({
-          charKey: 'elena',
-          mood: 'Impressed',
-          showBlueprint: true,
-          text: '*Elena inspects your assembled Prototype IV Loom Governor with a jeweler’s loupe.* "Flawless 3:1 reduction and a brass finger guard! Take this straight up the northern road to the Highland Council—Councilor Minh won’t be able to call STEM inequality a \'tradition\' once he sees this spin."'
-        });
-      } else {
-        this.showDialogue({
-          charKey: 'elena',
-          mood: 'Encouraging',
-          text: '"Welcome to the Innovation Guild! Maya’s blueprints are brilliant, but our scholarship board answers to the Highland Council. Help Maya assemble Prototype IV at her workshop bench—unpack your Parts Chest [I] and pick up extra Mechanical Components from Barnaby at the Marketplace!"'
-        });
-      }
+      if (gameState.state.quests.highland_hearing.completed) this.playDialogueNode('elena_after_highland');
+      else if (gameState.state.quests.mayas_loom.completed) this.playDialogueNode('elena_after_loom');
+      else this.playDialogueNode('elena_before_loom');
     }
-
     startBuildToolQuest() {
-      const comp = gameState.getItemQty('mechanical_components');
-      if (comp < 3) {
-        this.showDialogue({
-          charKey: 'maya_happy',
-          mood: 'Ready to Build',
-          showBlueprint: true,
-          text: `*Maya sets out her brass pliers.* "We need 3 Mechanical Components to build Prototype IV (you currently have ${comp}/3).\n\nTip: Open your Inventory [I] and click USE on the Mechanical Parts Chest for 2 free components, then grab 1 more at Barnaby's Marketplace with your 15% discount!"`
-        });
-        return;
-      }
-
-      this.buildStageOne();
+      this.playDialogueNode(this.checkDialogueFlag('has3Comp') ? 'build_step1' : 'build_need_parts');
     }
-
-    buildStageOne() {
-      this.showDialogue({
-        charKey: 'maya_happy',
-        mood: 'Build Step 1/3',
-        showBlueprint: true,
-        text: '*Clink! You lay out 3 sets of brass gears on the oak workbench.* "Step 1: Drive Gear Ratio! We need to cut the force on Mom’s wrists by 60% without making the loom crawl like a snail. Which gear ratio should we mount?"',
-        choices: [
-          { icon: '⚙️', tag: '1:1 DIRECT DRIVE', label: 'Keep a 1:1 ratio for maximum speed.', onSelect: () => this.buildRetry('1:1 spins fast, but it gives zero mechanical advantage—Clara’s wrists would still ache in winter! Try another ratio.', () => this.buildStageOne()) },
-          { icon: '✅', tag: '3:1 GEAR REDUCTION', label: 'Mount a 3:1 brass reduction train for smooth 60% torque relief.', onSelect: () => { audioManager.playBuildClink(); this.buildStageTwo(); } },
-          { icon: '🐢', tag: '12:1 HEAVY WINCH', label: 'Install a massive 12:1 crane gear.', onSelect: () => this.buildRetry('12:1 could lift a horse cart, haha—way too slow for stitching winter coats! Let’s balance speed and ease.', () => this.buildStageOne()) }
-        ]
-      });
-    }
-
-    buildStageTwo() {
-      this.showDialogue({
-        charKey: 'maya_happy',
-        mood: 'Build Step 2/3',
-        showBlueprint: true,
-        text: '*The 3:1 gear train meshes cleanly!* "Step 2: Thread Tension Arm! If the spring snaps mid-seam, it ruins a whole bolt of wool. What tension coil should we fit?"',
-        choices: [
-          { icon: '🪢', tag: 'HEMP TWINE', label: 'Tie it tight with heavy twine to save brass.', onSelect: () => this.buildRetry('Twine stretches out after twenty turns—it won’t hold steady tension! Let’s use proper spring metal.', () => this.buildStageTwo()) },
-          { icon: '✅', tag: 'TEMPERED WATCH-SPRING', label: 'Install a tempered spiral watch-spring with adjustable stop.', onSelect: () => { audioManager.playBuildClink(); this.buildStageThree(); } },
-          { icon: '🔩', tag: 'RIGID IRON BAR', label: 'Weld it completely rigid so it never moves.', onSelect: () => this.buildRetry('If the arm can’t flex at all, thick winter wool will snap the needle! It needs calibrated elasticity.', () => this.buildStageTwo()) }
-        ]
-      });
-    }
-
-    buildStageThree() {
-      this.showDialogue({
-        charKey: 'maya_happy',
-        mood: 'Build Step 3/3',
-        showBlueprint: true,
-        text: '*The spring arm clicks smoothly into place!* "Final Step: Workshop Safety! Leo is still learning the machine, and loose sleeves near open gears are dangerous. How do we finish Prototype IV?"',
-        choices: [
-          { icon: '⚡', tag: 'LEAVE GEARS EXPOSED', label: 'Skip the casing so everyone can admire the spinning brass.', onSelect: () => this.buildRetry('Exposed teeth look flashy, but good engineering puts the human operator’s safety first! Let’s shield it.', () => this.buildStageThree()) },
-          {
-            icon: '🛠️', tag: 'BRASS GUARD & RELEASE LEVER', label: 'Bolt on a hinged brass finger-guard and quick-stop lever.',
-            onSelect: () => {
-              audioManager.playFanfare();
-              gameState.consumeItem('mechanical_components', 3);
-              this.openQuestSuccess('mayas_loom');
-            }
-          }
-        ]
-      });
-    }
-
-    buildRetry(msg, retryFn) {
-      this.showDialogue({
-        charKey: 'maya_happy',
-        mood: 'Recalibrating',
-        showBlueprint: true,
-        text: `*Maya inspects the assembly and grins encouragingly.* "${msg}"`,
-        nextAction: { label: 'Adjust Assembly', onClick: retryFn }
-      });
-    }
-
-    // ---- ACT 3: HIGHLAND COUNCIL POLICY HEARING ----
     startHighlandHearing() {
-      if (gameState.state.quests.highland_hearing.completed) {
-        this.showDialogue({
-          charKey: 'councilor_linh',
-          mood: 'Respectful',
-          text: '*Councilor Minh bows warmly beneath the Council streetlights.* "The Vale Equal-Access Charter is already bearing fruit. Changing one mind starts a spark; changing a bylaw lights the whole valley."'
-        });
-        return;
-      }
-
-      const hasLoom = gameState.getItemQty('prototype_loom') > 0 || gameState.state.loomBuilt;
-      this.showDialogue({
-        charKey: 'councilor_linh',
-        mood: 'Formal & Skeptical',
-        text: '*Councilor Minh taps his gavel on the marble podium.* "You have earned 50 Social Credibility in Vale, traveler—rare for an outsider. Yet you ask this Council to overturn thirty years of guild bylaws reserving engineering stipends for \'traditional male household heirs.\' Why rewrite institutional law over one talented tailor’s daughter?"',
-        choices: [
-          {
-            icon: '🛠️', tag: hasLoom ? 'DEMONSTRATE PROTOTYPE IV' : 'CITE MAYA’S BLUEPRINT',
-            label: hasLoom
-              ? 'Place Prototype IV on the podium—Maya isn’t an exception; she’s proof of what bias hides.'
-              : 'Show Maya’s blueprints—talent shouldn’t be filtered by gender.',
-            onSelect: () => this.highlandStageTwo(hasLoom)
-          },
-          {
-            icon: '📉', tag: 'ECONOMIC ARGUMENT',
-            label: 'Excluding half of Vale’s youth from STEM starves our entire valley’s productivity and innovation.',
-            onSelect: () => this.highlandStageTwo(hasLoom)
-          },
-          {
-            icon: '🤷', tag: 'OVERSIMPLIFY',
-            label: 'Just tell families to be nicer—we don’t really need written policy changes.',
-            onSelect: () => {
-              this.showDialogue({
-                charKey: 'elena',
-                mood: 'Sharp',
-                text: '*Guildmaster Elena leans in quietly.* "Careful, traveler! Individual kindness helped Maya’s household, yes—but without changing the Council’s scholarship bylaws, the next girl without an advocate will hit the exact same wall."',
-                nextAction: { label: 'Reframe Your Argument', onClick: () => this.startHighlandHearing() }
-              });
-            }
-          }
-        ]
-      });
-    }
-
-    highlandStageTwo(hasLoom) {
-      const demoLine = hasLoom
-        ? '*You set Prototype IV onto the Council desk. Maya turns the brass crank effortlessly with two fingers—the gears whisper smoothly as Councilor Minh’s eyebrows shoot up.*'
-        : '*Councilor Minh studies the blueprints and Guildmaster Elena’s assessment, slowly nodding.*';
-
-      this.showDialogue({
-        charKey: 'councilor_linh',
-        mood: 'Thoughtful',
-        showBlueprint: true,
-        text: `${demoLine}\n\n"Impressive... Yet families worry that opening STEM stipends to daughters will leave traditional trades understaffed. What charter do you propose this Council ratify?"`,
-        choices: [
-          {
-            icon: '📜', tag: 'EQUAL-ACCESS CHARTER',
-            label: 'Merit-based open admissions for ALL genders in both Engineering AND traditional trades—plus family mentorship grants.',
-            onSelect: () => this.highlandResolution()
-          },
-          {
-            icon: '🔒', tag: 'SPECIAL EXCEPTION ONLY',
-            label: 'Grant a single one-time exception for Maya, and leave the old rules intact.',
-            onSelect: () => {
-              this.showDialogue({
-                charKey: 'maya_happy',
-                mood: 'Passionate',
-                text: '*Maya steps forward firmly.* "No! If I walk through that Academy door and let it slam shut behind me, nothing truly changed for Lily or any other kid in Vale. Make the door open for everyone!"',
-                nextAction: { label: 'Propose Systemic Reform', onClick: () => this.highlandStageTwo(hasLoom) }
-              });
-            }
-          }
-        ]
-      });
-    }
-
-    highlandResolution() {
-      this.showDialogue({
-        charKey: 'councilor_linh',
-        mood: 'Convinced',
-        text: '*Councilor Minh stamps the red wax seal onto crisp parchment.* "Well argued, traveler. Open merit apprenticeships for every trade and STEM field—and support so sons like Leo and daughters like Maya alike can choose their own craft without fear. By decree of the Highland Council, the Vale Equal-Access Charter is law!"',
-        nextAction: {
-          label: 'Accept the Charter & Celebrate ✨',
-          onClick: () => this.openQuestSuccess('highland_hearing')
-        }
-      });
+      this.playDialogueNode(gameState.state.quests.highland_hearing.completed ? 'highland_done' : 'highland_start');
     }
 
     // ---- QUEST SUCCESS MODAL (SUPPORTS ALL 3 ACTS) ----
@@ -3225,43 +3036,7 @@
 
     // Safe-to-Fail Private Replay Sandbox (from Innovation doc: test alternative/biased choices safely!)
     startPrivateReplaySandbox() {
-      this.showDialogue({
-        charKey: 'maya',
-        mood: 'Private Replay',
-        text: '[SAFE SANDBOX REPLAY — Your real save & reputation are protected.]\n\nExplore what happens when someone repeats subtle, everyday gender stereotypes to Maya:',
-        choices: [
-          {
-            icon: '🗣️', tag: 'TEST SUBTLE BIAS', label: '"Engineering is mostly for boys, Maya—you’re already great at sewing, why make life harder?"',
-            onSelect: () => {
-              const unlocked = gameState.unlockJournalEntry('mayas_shadow_restorative');
-              this.showDialogue({
-                charKey: 'maya',
-                mood: 'Withdrawn (Impact)',
-                text: '*Maya slowly folds her blueprint and slides it back under the cloth.* "Yeah... maybe you’re right. Maybe I was just being foolish."\n\n[SANDBOX INSIGHT: Even polite, well-meaning advice can quietly reinforce self-doubt and shut down STEM ambition. Notice how accountability & restorative listening reopen the door.]',
-                nextAction: {
-                  label: unlocked ? 'Unlock "Mending Trust" Entry & Return' : 'Return to Reflection Journal',
-                  onClick: () => {
-                    if (unlocked) this.toast('📖 New Sandbox Entry Unlocked: Mending Trust!');
-                    this.openJournal();
-                  }
-                }
-              });
-            }
-          },
-          {
-            icon: '🤝', tag: 'TEST RESTORATIVE REPAIR', label: '"Wait—I realized how dismissive that sounded. Let me help mend things and listen properly."',
-            onSelect: () => {
-              gameState.unlockJournalEntry('mayas_shadow_restorative');
-              this.showDialogue({
-                charKey: 'maya_happy',
-                mood: 'Reassured',
-                text: '*Maya exhales and pulls her blueprint back out.* "Thank you for catching yourself. Nobody gets every conversation right on the first try—what matters is being willing to listen and repair trust."',
-                nextAction: { label: 'Return to Reflection Journal', onClick: () => this.openJournal() }
-              });
-            }
-          }
-        ]
-      });
+      this.playDialogueNode('replay_start');
     }
 
     // ---- COMMUNITY FEEDBACK TOOL ----
